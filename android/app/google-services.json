@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "480568774195",
+    "project_id": "jikah-1873c",
+    "storage_bucket": "jikah-1873c.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:480568774195:android:bb99ab497e2770da449d46",
+        "android_client_info": {
+          "package_name": "com.example.jikah"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBUkZsnZ2LQCwaV9-RRw07UguvRlkZERMY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
