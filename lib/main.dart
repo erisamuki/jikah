@@ -10,11 +10,9 @@ import 'screens/splash_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
+
   // Initialize Firebase
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
   runApp(const JikahApp());
 }
@@ -36,7 +34,7 @@ class JikahApp extends StatelessWidget {
             title: 'Jikah',
             debugShowCheckedModeBanner: false,
             theme: JikahTheme.lightTheme,
-            darkTheme: JikahTheme.darkTheme,flutter
+            darkTheme: JikahTheme.darkTheme,
             themeMode: themeService.themeMode,
             home: const SplashScreen(),
           );
