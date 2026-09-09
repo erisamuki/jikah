@@ -10,6 +10,8 @@ import '../../models/payment_model.dart';
 import '../../widgets/custom_text_field.dart';
 import '../../widgets/custom_button.dart';
 
+const double _wideScreenBreakpoint = 800;
+
 class FinancialLogsScreen extends StatefulWidget {
   const FinancialLogsScreen({super.key});
 
@@ -22,13 +24,10 @@ class _FinancialLogsScreenState extends State<FinancialLogsScreen> {
   final _dateTimeFormat = DateFormat('dd MMM yyyy, hh:mm a');
 
   String _searchQuery = '';
-  String? _selectedPropertyId; // null = all properties
-  PaymentStatus? _selectedStatus; // null = all statuses
+  String? _selectedPropertyId;
+  PaymentStatus? _selectedStatus;
   DateTimeRange? _dateRange;
 
-  // Kept in sync on every build so the "Print PDF" app bar action can
-  // export exactly what's currently on screen (respecting active
-  // search/filters) without recomputing the filter logic separately.
   List<PaymentModel> _currentFiltered = [];
   FinancialProvider? _currentProvider;
 
@@ -55,9 +54,6 @@ class _FinancialLogsScreenState extends State<FinancialLogsScreen> {
       if (_selectedPropertyId != null && p.propertyId != _selectedPropertyId) return false;
 
       if (_dateRange != null) {
-        // Filter against paidDate when present (actual payment date),
-        // otherwise fall back to dueDate so pending/overdue records
-        // with no paidDate can still be found by date range.
         final reference = p.paidDate ?? p.dueDate;
         final d = DateTime(reference.year, reference.month, reference.day);
         final start = DateTime(
@@ -81,7 +77,7 @@ class _FinancialLogsScreenState extends State<FinancialLogsScreen> {
     }).toList()..sort((a, b) {
       final aDate = a.paidDate ?? a.dueDate;
       final bDate = b.paidDate ?? b.dueDate;
-      return bDate.compareTo(aDate); // most recent first
+      return bDate.compareTo(aDate);
     });
   }
 
@@ -98,160 +94,258 @@ class _FinancialLogsScreenState extends State<FinancialLogsScreen> {
     }
   }
 
+  bool get _hasActiveFilters =>
+      _searchQuery.trim().isNotEmpty ||
+      _selectedPropertyId != null ||
+      _selectedStatus != null ||
+      _dateRange != null;
+
+  void _clearAllFilters() {
+    setState(() {
+      _searchController.clear();
+      _searchQuery = '';
+      _selectedPropertyId = null;
+      _selectedStatus = null;
+      _dateRange = null;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Financial Logs'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.picture_as_pdf),
-            tooltip: 'Print / Export PDF',
+      floatingActionButton: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          FloatingActionButton(
+            heroTag: 'export-pdf',
+            mini: true,
             onPressed: _currentFiltered.isEmpty ? null : _exportPdf,
+            tooltip: 'Print / Export PDF',
+            backgroundColor: _currentFiltered.isEmpty
+                ? Colors.grey.shade400
+                : Theme.of(context).primaryColor,
+            child: const Icon(Icons.picture_as_pdf),
+          ),
+          const SizedBox(height: 12),
+          FloatingActionButton.extended(
+            heroTag: 'record-payment',
+            onPressed: () => _showRecordPaymentDialog(context),
+            icon: const Icon(Icons.add),
+            label: const Text('Record Payment'),
           ),
         ],
       ),
-      body: Consumer<FinancialProvider>(
-        builder: (context, provider, _) {
-          final filtered = _applyFilters(provider.payments, provider);
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          final isWide = constraints.maxWidth > _wideScreenBreakpoint;
 
-          // Keep the export button in sync with whatever is currently
-          // visible under the active filters.
-          _currentFiltered = filtered;
-          _currentProvider = provider;
+          return Consumer<FinancialProvider>(
+            builder: (context, provider, _) {
+              final filtered = _applyFilters(provider.payments, provider);
+              _currentFiltered = filtered;
+              _currentProvider = provider;
 
-          return Column(
-            children: [
-              _buildFilterBar(provider),
-              _buildActiveFilterSummary(filtered.length),
-              const Divider(height: 1),
-              Expanded(
-                child: filtered.isEmpty
-                    ? const Center(child: Text('No payment records match these filters'))
-                    : ListView.separated(
-                        itemCount: filtered.length,
-                        separatorBuilder: (_, _) => const Divider(height: 1),
-                        itemBuilder: (context, index) => _buildLogRow(filtered[index], provider),
+              return Column(
+                children: [
+                  Center(
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(maxWidth: isWide ? 1100 : double.infinity),
+                      child: _buildFilterBar(provider, isWide),
+                    ),
+                  ),
+                  Padding(
+                    padding: EdgeInsets.symmetric(horizontal: isWide ? 24 : 16, vertical: 4),
+                    child: Align(
+                      alignment: isWide ? Alignment.center : Alignment.centerLeft,
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(maxWidth: isWide ? 1100 : double.infinity),
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: _buildActiveFilterSummary(filtered.length),
+                        ),
                       ),
-              ),
-            ],
+                    ),
+                  ),
+                  const Divider(height: 1),
+                  Expanded(
+                    child: filtered.isEmpty
+                        ? Center(
+                            child: Text(
+                              _hasActiveFilters
+                                  ? 'No payment records match these filters'
+                                  : 'No payment records yet',
+                            ),
+                          )
+                        : SingleChildScrollView(
+                            padding: const EdgeInsets.only(bottom: 96),
+                            child: Center(
+                              child: ConstrainedBox(
+                                constraints: BoxConstraints(
+                                  maxWidth: isWide ? 1100 : double.infinity,
+                                ),
+                                child: Column(
+                                  children: [
+                                    for (int i = 0; i < filtered.length; i++) ...[
+                                      _buildLogRow(filtered[i], provider),
+                                      if (i != filtered.length - 1) const Divider(height: 1),
+                                    ],
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                  ),
+                ],
+              );
+            },
           );
         },
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _showRecordPaymentDialog(context),
-        icon: const Icon(Icons.add),
-        label: const Text('Record Payment'),
       ),
     );
   }
 
-  Widget _buildFilterBar(FinancialProvider provider) {
+  Widget _buildFilterBar(FinancialProvider provider, bool isWide) {
     final propertyIds = provider.payments.map((p) => p.propertyId).toSet();
 
+    final searchField = TextField(
+      controller: _searchController,
+      decoration: InputDecoration(
+        hintText: 'Search tenant name or receipt no.',
+        prefixIcon: const Icon(Icons.search, size: 20),
+        isDense: true,
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+        contentPadding: const EdgeInsets.symmetric(vertical: 12),
+        suffixIcon: _searchQuery.isNotEmpty
+            ? IconButton(
+                icon: const Icon(Icons.clear, size: 18),
+                onPressed: () {
+                  _searchController.clear();
+                  setState(() => _searchQuery = '');
+                },
+              )
+            : null,
+      ),
+      onChanged: (value) => setState(() => _searchQuery = value),
+    );
+
+    final propertyDropdown = DropdownButtonFormField<String?>(
+      initialValue: _selectedPropertyId,
+      isDense: true,
+      decoration: InputDecoration(
+        labelText: 'Property',
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      ),
+      items: [
+        const DropdownMenuItem(value: null, child: Text('All properties')),
+        ...propertyIds.map((id) {
+          final property = provider.propertyById(id);
+          return DropdownMenuItem(
+            value: id,
+            child: Text(property?.name ?? 'Unknown', overflow: TextOverflow.ellipsis),
+          );
+        }),
+      ],
+      onChanged: (value) => setState(() => _selectedPropertyId = value),
+    );
+
+    final statusDropdown = DropdownButtonFormField<PaymentStatus?>(
+      initialValue: _selectedStatus,
+      isDense: true,
+      decoration: InputDecoration(
+        labelText: 'Status',
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      ),
+      items: const [
+        DropdownMenuItem(value: null, child: Text('All statuses')),
+        DropdownMenuItem(value: PaymentStatus.paid, child: Text('Paid')),
+        DropdownMenuItem(value: PaymentStatus.pending, child: Text('Pending')),
+        DropdownMenuItem(value: PaymentStatus.overdue, child: Text('Overdue')),
+      ],
+      onChanged: (value) => setState(() => _selectedStatus = value),
+    );
+
+    final dateRangeButton = OutlinedButton.icon(
+      onPressed: _pickDateRange,
+      icon: const Icon(Icons.date_range, size: 18),
+      label: Text(
+        _dateRange == null
+            ? 'Date range'
+            : '${DateFormat('dd MMM').format(_dateRange!.start)} \u2013 ${DateFormat('dd MMM yyyy').format(_dateRange!.end)}',
+        overflow: TextOverflow.ellipsis,
+      ),
+      style: OutlinedButton.styleFrom(
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ),
+    );
+
+    final clearButton = _hasActiveFilters
+        ? TextButton(onPressed: _clearAllFilters, child: const Text('Clear'))
+        : const SizedBox.shrink();
+
+    if (isWide) {
+      // Everything fits comfortably on one row on a PC-sized window.
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(24, 20, 24, 8),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Expanded(flex: 3, child: searchField),
+            const SizedBox(width: 12),
+            Expanded(flex: 2, child: propertyDropdown),
+            const SizedBox(width: 12),
+            Expanded(flex: 2, child: statusDropdown),
+            const SizedBox(width: 12),
+            SizedBox(width: 220, child: dateRangeButton),
+            if (_hasActiveFilters) ...[const SizedBox(width: 4), clearButton],
+          ],
+        ),
+      );
+    }
+
+    // Narrow / phone layout: stacked, full width.
     return Padding(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
       child: Column(
         children: [
-          TextField(
-            controller: _searchController,
-            decoration: InputDecoration(
-              hintText: 'Search by tenant name or receipt number',
-              prefixIcon: const Icon(Icons.search),
-              isDense: true,
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-              suffixIcon: _searchQuery.isNotEmpty
-                  ? IconButton(
-                      icon: const Icon(Icons.clear),
-                      onPressed: () {
-                        _searchController.clear();
-                        setState(() => _searchQuery = '');
-                      },
-                    )
-                  : null,
-            ),
-            onChanged: (value) => setState(() => _searchQuery = value),
+          Row(
+            children: [
+              Expanded(child: searchField),
+              if (_hasActiveFilters) ...[const SizedBox(width: 8), clearButton],
+            ],
           ),
           const SizedBox(height: 10),
           Row(
             children: [
-              Expanded(
-                child: DropdownButtonFormField<String?>(
-                  initialValue: _selectedPropertyId,
-                  isDense: true,
-                  decoration: InputDecoration(
-                    labelText: 'Property',
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  ),
-                  items: [
-                    const DropdownMenuItem(value: null, child: Text('All properties')),
-                    ...propertyIds.map((id) {
-                      final property = provider.propertyById(id);
-                      return DropdownMenuItem(value: id, child: Text(property?.name ?? 'Unknown'));
-                    }),
-                  ],
-                  onChanged: (value) => setState(() => _selectedPropertyId = value),
-                ),
-              ),
+              Expanded(child: propertyDropdown),
               const SizedBox(width: 10),
-              Expanded(
-                child: DropdownButtonFormField<PaymentStatus?>(
-                  initialValue: _selectedStatus,
-                  isDense: true,
-                  decoration: InputDecoration(
-                    labelText: 'Status',
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  ),
-                  items: const [
-                    DropdownMenuItem(value: null, child: Text('All statuses')),
-                    DropdownMenuItem(value: PaymentStatus.paid, child: Text('Paid')),
-                    DropdownMenuItem(value: PaymentStatus.pending, child: Text('Pending')),
-                    DropdownMenuItem(value: PaymentStatus.overdue, child: Text('Overdue')),
-                  ],
-                  onChanged: (value) => setState(() => _selectedStatus = value),
-                ),
-              ),
+              Expanded(child: statusDropdown),
             ],
           ),
           const SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: _pickDateRange,
-                  icon: const Icon(Icons.date_range, size: 18),
-                  label: Text(
-                    _dateRange == null
-                        ? 'Filter by date range'
-                        : '${DateFormat('dd MMM yyyy').format(_dateRange!.start)} - ${DateFormat('dd MMM yyyy').format(_dateRange!.end)}',
-                  ),
-                ),
+          SizedBox(width: double.infinity, child: dateRangeButton),
+          if (_dateRange != null)
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton.icon(
+                onPressed: () => setState(() => _dateRange = null),
+                icon: const Icon(Icons.clear, size: 16),
+                label: const Text('Clear date filter'),
+                style: TextButton.styleFrom(padding: EdgeInsets.zero, minimumSize: Size.zero),
               ),
-              if (_dateRange != null)
-                IconButton(
-                  icon: const Icon(Icons.clear),
-                  tooltip: 'Clear date filter',
-                  onPressed: () => setState(() => _dateRange = null),
-                ),
-            ],
-          ),
+            ),
         ],
       ),
     );
   }
 
   Widget _buildActiveFilterSummary(int count) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      child: Align(
-        alignment: Alignment.centerLeft,
-        child: Text(
-          '$count record${count == 1 ? '' : 's'}',
-          style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
-        ),
-      ),
+    return Text(
+      '$count record${count == 1 ? '' : 's'}',
+      style: TextStyle(color: Colors.grey.shade600, fontSize: 13, fontWeight: FontWeight.w500),
     );
   }
 
@@ -276,7 +370,7 @@ class _FinancialLogsScreenState extends State<FinancialLogsScreen> {
     final displayDate = payment.paidDate ?? payment.dueDate;
 
     return ListTile(
-      dense: false,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
       title: Row(
         children: [
           Expanded(
@@ -296,13 +390,19 @@ class _FinancialLogsScreenState extends State<FinancialLogsScreen> {
             Text(
               '${property?.name ?? 'Unknown property'} \u2014 Room/Unit: ${unit?.unitNumber ?? 'Unknown'}',
             ),
-            if (property?.location != null) Text(property!.location),
+            if (property?.location != null)
+              Text(property!.location, style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
             Text(
               payment.paidDate != null
                   ? _dateTimeFormat.format(displayDate)
                   : 'Due ${_dateTimeFormat.format(displayDate)} (not yet paid)',
+              style: TextStyle(color: Colors.grey.shade700, fontSize: 12),
             ),
-            Row(
+            const SizedBox(height: 4),
+            Wrap(
+              spacing: 8,
+              runSpacing: 4,
+              crossAxisAlignment: WrapCrossAlignment.center,
               children: [
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
@@ -315,18 +415,15 @@ class _FinancialLogsScreenState extends State<FinancialLogsScreen> {
                     style: TextStyle(color: statusColor, fontSize: 11, fontWeight: FontWeight.bold),
                   ),
                 ),
-                const SizedBox(width: 8),
                 Text(
                   payment.methodDisplay,
                   style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
                 ),
-                if (payment.receiptNumber != null) ...[
-                  const SizedBox(width: 8),
+                if (payment.receiptNumber != null)
                   Text(
                     'Receipt: ${payment.receiptNumber}',
                     style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
                   ),
-                ],
               ],
             ),
           ],
@@ -578,8 +675,8 @@ class _FinancialLogsScreenState extends State<FinancialLogsScreen> {
                   );
 
                   if (dialogContext.mounted) {
-                    Navigator.pop(dialogContext); // close loading
-                    Navigator.pop(dialogContext); // close form
+                    Navigator.pop(dialogContext);
+                    Navigator.pop(dialogContext);
 
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
