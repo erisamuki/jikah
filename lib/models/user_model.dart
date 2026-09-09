@@ -15,6 +15,7 @@ class UserModel {
   final String? ninOrPassport; // National ID or Passport
   final String? nextOfKin; // For tenants
   final String? nextOfKinContact;
+  final DateTime? leaseStartDate; // For tenants \u2014 used for arrears/advance calc
   final DateTime createdAt;
   final DateTime? updatedAt;
   final bool isActive;
@@ -32,6 +33,7 @@ class UserModel {
     this.ninOrPassport,
     this.nextOfKin,
     this.nextOfKinContact,
+    this.leaseStartDate,
     required this.createdAt,
     this.updatedAt,
     this.isActive = true,
@@ -52,6 +54,7 @@ class UserModel {
       'ninOrPassport': ninOrPassport,
       'nextOfKin': nextOfKin,
       'nextOfKinContact': nextOfKinContact,
+      'leaseStartDate': leaseStartDate != null ? Timestamp.fromDate(leaseStartDate!) : null,
       'createdAt': Timestamp.fromDate(createdAt),
       'updatedAt': updatedAt != null ? Timestamp.fromDate(updatedAt!) : null,
       'isActive': isActive,
@@ -65,10 +68,7 @@ class UserModel {
       fullName: map['fullName'] ?? '',
       email: map['email'] ?? '',
       phone: map['phone'] ?? '',
-      role: UserRole.values.firstWhere(
-        (e) => e.name == map['role'],
-        orElse: () => UserRole.tenant,
-      ),
+      role: UserRole.values.firstWhere((e) => e.name == map['role'], orElse: () => UserRole.tenant),
       profileImageUrl: map['profileImageUrl'],
       assignedLandlordId: map['assignedLandlordId'],
       assignedPropertyId: map['assignedPropertyId'],
@@ -76,10 +76,11 @@ class UserModel {
       ninOrPassport: map['ninOrPassport'],
       nextOfKin: map['nextOfKin'],
       nextOfKinContact: map['nextOfKinContact'],
-      createdAt: (map['createdAt'] as Timestamp).toDate(),
-      updatedAt: map['updatedAt'] != null
-          ? (map['updatedAt'] as Timestamp).toDate()
+      leaseStartDate: map['leaseStartDate'] != null
+          ? (map['leaseStartDate'] as Timestamp).toDate()
           : null,
+      createdAt: (map['createdAt'] as Timestamp).toDate(),
+      updatedAt: map['updatedAt'] != null ? (map['updatedAt'] as Timestamp).toDate() : null,
       isActive: map['isActive'] ?? true,
     );
   }
@@ -96,6 +97,7 @@ class UserModel {
     String? ninOrPassport,
     String? nextOfKin,
     String? nextOfKinContact,
+    DateTime? leaseStartDate,
     bool? isActive,
   }) {
     return UserModel(
@@ -111,6 +113,7 @@ class UserModel {
       ninOrPassport: ninOrPassport ?? this.ninOrPassport,
       nextOfKin: nextOfKin ?? this.nextOfKin,
       nextOfKinContact: nextOfKinContact ?? this.nextOfKinContact,
+      leaseStartDate: leaseStartDate ?? this.leaseStartDate,
       createdAt: createdAt,
       updatedAt: DateTime.now(),
       isActive: isActive ?? this.isActive,

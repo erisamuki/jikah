@@ -7,6 +7,7 @@ import 'services/theme_service.dart';
 import 'providers/auth_provider.dart';
 import 'providers/property_provider.dart';
 import 'screens/splash_screen.dart';
+import 'providers/financial_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -27,6 +28,7 @@ class JikahApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => ThemeService()),
         ChangeNotifierProvider(create: (_) => AuthProvider()),
         ChangeNotifierProvider(create: (_) => PropertyProvider()),
+        ChangeNotifierProvider(create: (_) => FinancialProvider()),
       ],
       child: Consumer<ThemeService>(
         builder: (context, themeService, child) {

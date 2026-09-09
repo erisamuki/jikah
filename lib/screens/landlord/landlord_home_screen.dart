@@ -8,7 +8,8 @@ import 'properties_screen.dart';
 import 'tenants_screen.dart';
 import 'managers_screen.dart';
 import 'maintenance_screen.dart';
-// ADD THIS
+import 'financial_tracking_screen.dart';
+import 'financial_logs_screen.dart';
 import 'reports_screen.dart';
 import 'profile_screen.dart';
 import 'settings_screen.dart';
@@ -22,31 +23,33 @@ class LandlordHomeScreen extends StatefulWidget {
 
 class _LandlordHomeScreenState extends State<LandlordHomeScreen> {
   int _selectedIndex = 0;
-  // NEW:
-final List<Widget> _screens = [
-  const DashboardScreen(),
-  const PropertiesScreen(),
-  const TenantsScreen(),
-  const ManagersScreen(),
-  const MaintenanceScreen(),
-  //const SmsScreen(), // ADD THIS
-  const ReportsScreen(),
-  const ProfileScreen(),
-  const SettingsScreen(),
-];
 
-final List<String> _titles = [
-  'Dashboard',
-  'Properties',
-  'Tenants',
-  'Managers',
-  'Maintenance',
-  'SMS Reminders', // ADD THIS
-  'Reports',
-  'Profile',
-  'Settings',
-];
-  
+  final List<Widget> _screens = [
+    const DashboardScreen(),
+    const PropertiesScreen(),
+    const TenantsScreen(),
+    const ManagersScreen(),
+    const MaintenanceScreen(),
+    const FinancialTrackingScreen(),
+    const FinancialLogsScreen(),
+    const ReportsScreen(),
+    const ProfileScreen(),
+    const SettingsScreen(),
+  ];
+
+  final List<String> _titles = [
+    'Dashboard',
+    'Properties',
+    'Tenants',
+    'Managers',
+    'Maintenance',
+    'Financial Tracking',
+    'Financial Logs',
+    'Reports',
+    'Profile',
+    'Settings',
+  ];
+
   @override
   Widget build(BuildContext context) {
     final authProvider = context.watch<AuthProvider>();
@@ -57,17 +60,17 @@ final List<String> _titles = [
     return Scaffold(
       appBar: AppBar(
         title: Text(_titles[_selectedIndex]),
-        leading: isWideScreen ? null : Builder(
-          builder: (context) => IconButton(
-            icon: const Icon(Icons.menu),
-            onPressed: () => Scaffold.of(context).openDrawer(),
-          ),
-        ),
+        leading: isWideScreen
+            ? null
+            : Builder(
+                builder: (context) => IconButton(
+                  icon: const Icon(Icons.menu),
+                  onPressed: () => Scaffold.of(context).openDrawer(),
+                ),
+              ),
         actions: [
           IconButton(
-            icon: Icon(
-              themeService.isDarkMode ? Icons.light_mode : Icons.dark_mode,
-            ),
+            icon: Icon(themeService.isDarkMode ? Icons.light_mode : Icons.dark_mode),
             onPressed: () => themeService.toggleTheme(),
             tooltip: 'Toggle theme',
           ),
@@ -84,18 +87,14 @@ final List<String> _titles = [
               child: _buildSidebarContent(user, authProvider),
             ),
           // Main content
-          Expanded(
-            child: _screens[_selectedIndex],
-          ),
+          Expanded(child: _screens[_selectedIndex]),
         ],
       ),
     );
   }
 
   Widget _buildDrawer(dynamic user, AuthProvider authProvider) {
-    return Drawer(
-      child: _buildSidebarContent(user, authProvider),
-    );
+    return Drawer(child: _buildSidebarContent(user, authProvider));
   }
 
   Widget _buildSidebarContent(dynamic user, AuthProvider authProvider) {
@@ -139,10 +138,7 @@ final List<String> _titles = [
                 const SizedBox(height: 4),
                 Text(
                   user?.phone ?? '',
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.9),
-                    fontSize: 14,
-                  ),
+                  style: TextStyle(color: Colors.white.withValues(alpha: 0.9), fontSize: 14),
                 ),
               ],
             ),
@@ -158,10 +154,12 @@ final List<String> _titles = [
               _buildMenuItem(Icons.people, 'Tenants', 2),
               _buildMenuItem(Icons.manage_accounts, 'Managers', 3),
               _buildMenuItem(Icons.build, 'Maintenance', 4),
-              _buildMenuItem(Icons.bar_chart, 'Reports', 5),
+              _buildMenuItem(Icons.trending_up, 'Financial Tracking', 5),
+              _buildMenuItem(Icons.receipt_long, 'Financial Logs', 6),
+              _buildMenuItem(Icons.bar_chart, 'Reports', 7),
               const Divider(),
-              _buildMenuItem(Icons.person, 'Profile', 6),
-              _buildMenuItem(Icons.settings, 'Settings', 7),
+              _buildMenuItem(Icons.person, 'Profile', 8),
+              _buildMenuItem(Icons.settings, 'Settings', 9),
               const Divider(),
               ListTile(
                 leading: const Icon(Icons.logout, color: Colors.red),
@@ -169,9 +167,9 @@ final List<String> _titles = [
                 onTap: () async {
                   await authProvider.logout();
                   if (!mounted) return;
-                  Navigator.of(context).pushReplacement(
-                    MaterialPageRoute(builder: (_) => const LoginScreen()),
-                  );
+                  Navigator.of(
+                    context,
+                  ).pushReplacement(MaterialPageRoute(builder: (_) => const LoginScreen()));
                 },
               ),
             ],
@@ -180,13 +178,7 @@ final List<String> _titles = [
         // App version
         Padding(
           padding: const EdgeInsets.all(16),
-          child: Text(
-            'Jikah v1.0.0',
-            style: TextStyle(
-              color: Colors.grey.shade500,
-              fontSize: 12,
-            ),
-          ),
+          child: Text('Jikah v1.0.0', style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
         ),
       ],
     );
@@ -195,10 +187,7 @@ final List<String> _titles = [
   Widget _buildMenuItem(IconData icon, String title, int index) {
     final isSelected = _selectedIndex == index;
     return ListTile(
-      leading: Icon(
-        icon,
-        color: isSelected ? Theme.of(context).primaryColor : Colors.grey,
-      ),
+      leading: Icon(icon, color: isSelected ? Theme.of(context).primaryColor : Colors.grey),
       title: Text(
         title,
         style: TextStyle(
