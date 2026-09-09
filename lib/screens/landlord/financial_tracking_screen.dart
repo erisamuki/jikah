@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
@@ -306,13 +307,38 @@ class _FinancialTrackingScreenState extends State<FinancialTrackingScreen>
     );
   }
 
+  /// Loads a Unicode-capable font for the PDF (default Helvetica silently
+  /// drops characters like "—" and "•" used in this report, logging a
+  /// console warning instead of rendering them).
+  ///
+  /// Requires two font assets bundled in pubspec.yaml, e.g.:
+  ///   assets:
+  ///     - assets/fonts/NotoSans-Regular.ttf
+  ///     - assets/fonts/NotoSans-Bold.ttf
+  /// Download both from https://fonts.google.com/noto/specimen/Noto+Sans
+  ///
+  /// Falls back to the pdf package's default theme (Helvetica) if the
+  /// assets aren't present yet, so a missing font file doesn't crash export
+  /// — you'll just see the Unicode warning again until the assets are added.
+  Future<pw.ThemeData?> _loadPdfTheme() async {
+    try {
+      final regularData = await rootBundle.load('assets/fonts/NotoSans-Regular.ttf');
+      final boldData = await rootBundle.load('assets/fonts/NotoSans-Bold.ttf');
+      return pw.ThemeData.withFont(base: pw.Font.ttf(regularData), bold: pw.Font.ttf(boldData));
+    } catch (e) {
+      debugPrint('PDF font assets not found, falling back to default font: $e');
+      return null;
+    }
+  }
+
   Future<void> _exportPdf(BuildContext context) async {
     final provider = context.read<FinancialProvider>();
     final transactions = provider.recentTransactions;
     final arrears = provider.inArrears;
     final advance = provider.inAdvance;
 
-    final doc = pw.Document();
+    final theme = await _loadPdfTheme();
+    final doc = theme != null ? pw.Document(theme: theme) : pw.Document();
 
     doc.addPage(
       pw.MultiPage(
