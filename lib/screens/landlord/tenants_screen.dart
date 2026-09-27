@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:intl/intl.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/property_provider.dart';
+import '../../providers/financial_provider.dart';
 import '../../services/database_service.dart';
 import '../../services/auth_service.dart';
 import '../../models/user_model.dart';
 import '../../models/unit_model.dart';
+import '../../models/payment_model.dart';
 import '../../widgets/empty_state.dart';
 import '../../widgets/custom_text_field.dart';
 import '../../widgets/custom_button.dart';
@@ -35,6 +38,11 @@ class _TenantsScreenState extends State<TenantsScreen> {
         if (propertyProvider.units.isEmpty) {
           propertyProvider.loadUnitsForLandlord(user.uid);
         }
+        // Also start FinancialProvider's tenant/payment tracking here,
+        // since "Fix Lease Date & Backfill Payments" needs it and a
+        // landlord may open Tenants without visiting Financial
+        // Tracking/Logs first.
+        context.read<FinancialProvider>().startTracking(user.uid);
       }
     });
   }
@@ -118,6 +126,8 @@ class _TenantsScreenState extends State<TenantsScreen> {
               _showTenantDetailsDialog(context, tenant);
             } else if (value == 'contact') {
               _showContactDialog(context, tenant);
+            } else if (value == 'fix_records') {
+              _showFixRecordsDialog(context, tenant);
             } else if (value == 'remove') {
               _showRemoveTenantDialog(context, tenant);
             }
@@ -125,6 +135,10 @@ class _TenantsScreenState extends State<TenantsScreen> {
           itemBuilder: (context) => [
             const PopupMenuItem(value: 'view', child: Text('View Details')),
             const PopupMenuItem(value: 'contact', child: Text('Contact')),
+            const PopupMenuItem(
+              value: 'fix_records',
+              child: Text('Fix Lease Date & Backfill Payments'),
+            ),
             const PopupMenuItem(
               value: 'remove',
               child: Text('Remove', style: TextStyle(color: Colors.red)),
@@ -474,6 +488,229 @@ class _TenantsScreenState extends State<TenantsScreen> {
           ],
         ),
         actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close'))],
+      ),
+    );
+  }
+
+  /// Corrects a tenant's real lease start date and lets the landlord
+  /// backfill historical payments month-by-month (mirroring a paper/
+  /// spreadsheet rent register), for tenants who were added to Jikah
+  /// after they'd already been renting for a while. Without this,
+  /// arrears/advance calculations silently understate months owed and
+  /// miss payments made before the tenant was digitized into the app.
+  void _showFixRecordsDialog(BuildContext context, UserModel tenant) {
+    final propertyProvider = context.read<PropertyProvider>();
+    final financialProvider = context.read<FinancialProvider>();
+    final authUser = context.read<AuthProvider>().currentUser;
+
+    UnitModel? unit;
+    try {
+      unit = propertyProvider.units.firstWhere((u) => u.id == tenant.assignedUnitId);
+    } catch (_) {
+      unit = null;
+    }
+
+    if (authUser == null || tenant.assignedUnitId == null || unit == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('This tenant has no assigned unit \u2014 nothing to fix yet'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    final rentAmount = unit.rentAmount;
+    DateTime leaseStartDate = tenant.leaseStartDate ?? tenant.createdAt ?? DateTime.now();
+    PaymentMethod backfillMethod = PaymentMethod.cash;
+
+    // Build a rolling 12-month window ending this month, matching a
+    // typical rent-register layout (Jan-Dec style). Landlord ticks
+    // whichever months were actually paid.
+    final now = DateTime.now();
+    final months = List<DateTime>.generate(12, (i) => DateTime(now.year, now.month - 11 + i, 1));
+    final Map<DateTime, bool> monthChecked = {for (final m in months) m: false};
+    final Map<DateTime, TextEditingController> monthAmountControllers = {
+      for (final m in months) m: TextEditingController(text: rentAmount.toStringAsFixed(0)),
+    };
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setState) {
+          return AlertDialog(
+            title: Text('Fix Records \u2014 ${tenant.fullName}'),
+            content: SizedBox(
+              width: double.maxFinite,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Room/Unit ${unit!.unitNumber} \u2014 Rent ${NumberFormat.currency(locale: 'en_UG', symbol: 'UGX ', decimalDigits: 0).format(rentAmount)}/month',
+                      style: TextStyle(color: Colors.grey.shade700, fontSize: 13),
+                    ),
+                    const SizedBox(height: 16),
+
+                    const Text(
+                      '1. Correct Lease Start Date',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'This is when the tenant actually moved in \u2014 not when they were added to Jikah. Arrears are calculated from this date.',
+                      style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+                    ),
+                    const SizedBox(height: 8),
+                    InkWell(
+                      onTap: () async {
+                        final picked = await showDatePicker(
+                          context: dialogContext,
+                          initialDate: leaseStartDate,
+                          firstDate: DateTime(now.year - 5),
+                          lastDate: DateTime.now(),
+                        );
+                        if (picked != null) {
+                          setState(() => leaseStartDate = picked);
+                        }
+                      },
+                      child: InputDecorator(
+                        decoration: const InputDecoration(
+                          labelText: 'Real Lease Start Date',
+                          prefixIcon: Icon(Icons.event),
+                        ),
+                        child: Text(DateFormat('dd MMM yyyy').format(leaseStartDate)),
+                      ),
+                    ),
+
+                    const SizedBox(height: 20),
+                    const Text(
+                      '2. Backfill Missing Payments',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Tick every month this tenant actually paid, and adjust the amount if it differed. Only ticked months are added.',
+                      style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+                    ),
+                    const SizedBox(height: 8),
+                    DropdownButtonFormField<PaymentMethod>(
+                      initialValue: backfillMethod,
+                      decoration: const InputDecoration(
+                        labelText: 'Payment Method (applied to all ticked months)',
+                        prefixIcon: Icon(Icons.account_balance_wallet),
+                      ),
+                      items: const [
+                        DropdownMenuItem(value: PaymentMethod.cash, child: Text('Cash')),
+                        DropdownMenuItem(value: PaymentMethod.bankCard, child: Text('Bank Card')),
+                        DropdownMenuItem(
+                          value: PaymentMethod.mtnMomo,
+                          child: Text('MTN Mobile Money'),
+                        ),
+                        DropdownMenuItem(
+                          value: PaymentMethod.airtelMoney,
+                          child: Text('Airtel Money'),
+                        ),
+                      ],
+                      onChanged: (value) =>
+                          setState(() => backfillMethod = value ?? PaymentMethod.cash),
+                    ),
+                    const SizedBox(height: 12),
+                    ...months.map((m) {
+                      final label = DateFormat('MMMM yyyy').format(m);
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 4),
+                        child: Row(
+                          children: [
+                            Checkbox(
+                              value: monthChecked[m],
+                              onChanged: (v) => setState(() => monthChecked[m] = v ?? false),
+                            ),
+                            SizedBox(width: 130, child: Text(label)),
+                            Expanded(
+                              child: TextField(
+                                controller: monthAmountControllers[m],
+                                enabled: monthChecked[m] == true,
+                                keyboardType: TextInputType.number,
+                                decoration: const InputDecoration(
+                                  isDense: true,
+                                  prefixText: 'UGX ',
+                                  border: OutlineInputBorder(),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('Cancel'),
+              ),
+              CustomButton(
+                text: 'Save Fixes',
+                onPressed: () async {
+                  showDialog(
+                    context: dialogContext,
+                    barrierDismissible: false,
+                    builder: (_) => const Center(child: CircularProgressIndicator()),
+                  );
+
+                  // 1. Correct the lease start date.
+                  final leaseOk = await financialProvider.updateTenantLeaseStart(
+                    tenant.uid,
+                    leaseStartDate,
+                  );
+
+                  // 2. Backfill every ticked month as a real payment.
+                  int backfilled = 0;
+                  int failed = 0;
+                  for (final m in months) {
+                    if (monthChecked[m] != true) continue;
+                    final amount = double.tryParse(monthAmountControllers[m]!.text) ?? rentAmount;
+                    final success = await financialProvider.recordManualPayment(
+                      landlordId: authUser.uid,
+                      tenantId: tenant.uid,
+                      amount: amount,
+                      method: backfillMethod,
+                      monthYear: DateFormat('MMMM yyyy').format(m),
+                      paidDate: DateTime(m.year, m.month, 1, 12),
+                      notes: 'Backfilled historical payment',
+                    );
+                    if (success) {
+                      backfilled++;
+                    } else {
+                      failed++;
+                    }
+                  }
+
+                  if (dialogContext.mounted) {
+                    Navigator.pop(dialogContext); // close loading
+                    Navigator.pop(dialogContext); // close form
+
+                    final parts = <String>[];
+                    parts.add(leaseOk ? 'Lease date updated' : 'Lease date update failed');
+                    if (backfilled > 0) parts.add('$backfilled payment(s) backfilled');
+                    if (failed > 0) parts.add('$failed payment(s) failed');
+
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(parts.join(' \u2014 ')),
+                        backgroundColor: leaseOk && failed == 0 ? Colors.green : Colors.orange,
+                      ),
+                    );
+                  }
+                },
+              ),
+            ],
+          );
+        },
       ),
     );
   }

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
@@ -22,6 +23,7 @@ class FinancialLogsScreen extends StatefulWidget {
 class _FinancialLogsScreenState extends State<FinancialLogsScreen> {
   final _searchController = TextEditingController();
   final _dateTimeFormat = DateFormat('dd MMM yyyy, hh:mm a');
+  final _currencyFormat = NumberFormat.currency(locale: 'en_UG', symbol: 'UGX ', decimalDigits: 0);
 
   String _searchQuery = '';
   String? _selectedPropertyId;
@@ -370,6 +372,7 @@ class _FinancialLogsScreenState extends State<FinancialLogsScreen> {
     final displayDate = payment.paidDate ?? payment.dueDate;
 
     return ListTile(
+      onTap: () => _showEditPaymentDialog(context, payment, provider),
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
       title: Row(
         children: [
@@ -380,6 +383,8 @@ class _FinancialLogsScreenState extends State<FinancialLogsScreen> {
             ),
           ),
           Text(payment.formattedAmount, style: const TextStyle(fontWeight: FontWeight.bold)),
+          const SizedBox(width: 4),
+          Icon(Icons.edit, size: 16, color: Colors.grey.shade400),
         ],
       ),
       subtitle: Padding(
@@ -433,12 +438,34 @@ class _FinancialLogsScreenState extends State<FinancialLogsScreen> {
     );
   }
 
+  /// Loads a Unicode-capable font for the PDF (default Helvetica silently
+  /// drops characters like "—" used in this report's headers, logging a
+  /// console warning instead of rendering them).
+  ///
+  /// Requires two font assets bundled in pubspec.yaml:
+  ///   assets:
+  ///     - assets/fonts/NotoSans-Regular.ttf
+  ///     - assets/fonts/NotoSans-Bold.ttf
+  /// Falls back to the default theme if the assets aren't found, so a
+  /// missing font doesn't crash export.
+  Future<pw.ThemeData?> _loadPdfTheme() async {
+    try {
+      final regularData = await rootBundle.load('assets/fonts/NotoSans-Regular.ttf');
+      final boldData = await rootBundle.load('assets/fonts/NotoSans-Bold.ttf');
+      return pw.ThemeData.withFont(base: pw.Font.ttf(regularData), bold: pw.Font.ttf(boldData));
+    } catch (e) {
+      debugPrint('PDF font assets not found, falling back to default font: $e');
+      return null;
+    }
+  }
+
   Future<void> _exportPdf() async {
     final provider = _currentProvider;
     final logs = _currentFiltered;
     if (provider == null || logs.isEmpty) return;
 
-    final doc = pw.Document();
+    final theme = await _loadPdfTheme();
+    final doc = theme != null ? pw.Document(theme: theme) : pw.Document();
 
     final filterLines = <String>[];
     if (_searchQuery.trim().isNotEmpty) {
@@ -457,6 +484,14 @@ class _FinancialLogsScreenState extends State<FinancialLogsScreen> {
       );
     }
 
+    // Totals summary so the landlord can read the report and understand
+    // the numbers at a glance, without having to add up rows themselves.
+    final paidLogs = logs.where((p) => p.status == PaymentStatus.paid).toList();
+    final pendingLogs = logs.where((p) => p.status == PaymentStatus.pending).toList();
+    final overdueLogs = logs.where((p) => p.status == PaymentStatus.overdue).toList();
+    final totalAmount = logs.fold(0.0, (sum, p) => sum + p.amount);
+    final paidAmount = paidLogs.fold(0.0, (sum, p) => sum + p.amount);
+
     doc.addPage(
       pw.MultiPage(
         pageFormat: PdfPageFormat.a4,
@@ -464,7 +499,7 @@ class _FinancialLogsScreenState extends State<FinancialLogsScreen> {
           pw.Header(
             level: 0,
             child: pw.Text(
-              'Jikah \u2014 Financial Logs',
+              'Jikah — Financial Logs',
               style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold),
             ),
           ),
@@ -476,9 +511,40 @@ class _FinancialLogsScreenState extends State<FinancialLogsScreen> {
               style: pw.TextStyle(fontStyle: pw.FontStyle.italic, fontSize: 10),
             ),
           ],
-          pw.SizedBox(height: 6),
-          pw.Text('${logs.length} record${logs.length == 1 ? '' : 's'}'),
+          pw.SizedBox(height: 12),
+
+          // Totals block
+          pw.Container(
+            padding: const pw.EdgeInsets.all(10),
+            decoration: pw.BoxDecoration(
+              border: pw.Border.all(color: PdfColors.grey400),
+              borderRadius: const pw.BorderRadius.all(pw.Radius.circular(6)),
+            ),
+            child: pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Text(
+                  'Summary',
+                  style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 12),
+                ),
+                pw.SizedBox(height: 4),
+                pw.Text('Total records: ${logs.length}'),
+                pw.Text('Total amount (all records): ${_currencyFormat.format(totalAmount)}'),
+                pw.Text(
+                  'Paid: ${paidLogs.length} record${paidLogs.length == 1 ? '' : 's'} — '
+                  '${_currencyFormat.format(paidAmount)}',
+                ),
+                pw.Text(
+                  'Pending: ${pendingLogs.length} record${pendingLogs.length == 1 ? '' : 's'}',
+                ),
+                pw.Text(
+                  'Overdue: ${overdueLogs.length} record${overdueLogs.length == 1 ? '' : 's'}',
+                ),
+              ],
+            ),
+          ),
           pw.SizedBox(height: 16),
+
           pw.TableHelper.fromTextArray(
             headers: [
               'Tenant',
@@ -503,7 +569,7 @@ class _FinancialLogsScreenState extends State<FinancialLogsScreen> {
                 _dateTimeFormat.format(displayDate),
                 p.methodDisplay,
                 p.statusDisplay,
-                p.receiptNumber ?? '\u2014',
+                p.receiptNumber ?? '—',
               ];
             }).toList(),
             cellStyle: const pw.TextStyle(fontSize: 8),
@@ -517,6 +583,229 @@ class _FinancialLogsScreenState extends State<FinancialLogsScreen> {
     await Printing.layoutPdf(
       onLayout: (format) async => doc.save(),
       name: 'Jikah_Financial_Logs_${DateFormat('yyyyMMdd_HHmm').format(DateTime.now())}.pdf',
+    );
+  }
+
+  /// Lets the landlord correct a payment they already logged — wrong
+  /// amount, wrong month, mistyped date, etc. Reuses the same field
+  /// layout as the record-payment dialog but pre-filled, and calls
+  /// FinancialProvider.editPayment instead of recordManualPayment.
+  /// Tenant/property/unit are not editable here — if that was wrong,
+  /// the record should be deleted and re-entered against the right
+  /// tenant instead of reassigned.
+  void _showEditPaymentDialog(
+    BuildContext context,
+    PaymentModel payment,
+    FinancialProvider provider,
+  ) {
+    final formKey = GlobalKey<FormState>();
+    final amountController = TextEditingController(text: payment.amount.toStringAsFixed(0));
+    final monthYearController = TextEditingController(text: payment.monthYear);
+    final notesController = TextEditingController(text: payment.notes ?? '');
+
+    PaymentMethod selectedMethod = payment.method ?? PaymentMethod.cash;
+    DateTime selectedDateTime = payment.paidDate ?? payment.dueDate;
+
+    final tenant = provider.tenantById(payment.tenantId);
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setState) {
+          return AlertDialog(
+            title: Text('Edit Payment${tenant != null ? ' — ${tenant.fullName}' : ''}'),
+            content: SizedBox(
+              width: double.maxFinite,
+              child: SingleChildScrollView(
+                child: Form(
+                  key: formKey,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      CustomTextField(
+                        controller: amountController,
+                        label: 'Amount (UGX)',
+                        prefixIcon: Icons.payments,
+                        keyboardType: TextInputType.number,
+                        validator: (v) {
+                          if (v?.isEmpty ?? true) return 'Required';
+                          if (double.tryParse(v!) == null) return 'Enter a valid number';
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                      DropdownButtonFormField<PaymentMethod>(
+                        initialValue: selectedMethod,
+                        decoration: const InputDecoration(
+                          labelText: 'Payment Method',
+                          prefixIcon: Icon(Icons.account_balance_wallet),
+                        ),
+                        items: const [
+                          DropdownMenuItem(value: PaymentMethod.cash, child: Text('Cash')),
+                          DropdownMenuItem(value: PaymentMethod.bankCard, child: Text('Bank Card')),
+                          DropdownMenuItem(
+                            value: PaymentMethod.mtnMomo,
+                            child: Text('MTN Mobile Money'),
+                          ),
+                          DropdownMenuItem(
+                            value: PaymentMethod.airtelMoney,
+                            child: Text('Airtel Money'),
+                          ),
+                        ],
+                        onChanged: (value) =>
+                            setState(() => selectedMethod = value ?? selectedMethod),
+                      ),
+                      const SizedBox(height: 16),
+                      CustomTextField(
+                        controller: monthYearController,
+                        label: 'Month Covered (e.g. March 2026)',
+                        prefixIcon: Icons.calendar_month,
+                        validator: (v) => v?.isEmpty ?? true ? 'Required' : null,
+                      ),
+                      const SizedBox(height: 16),
+                      InkWell(
+                        onTap: () async {
+                          final date = await showDatePicker(
+                            context: dialogContext,
+                            initialDate: selectedDateTime,
+                            firstDate: DateTime(DateTime.now().year - 3),
+                            lastDate: DateTime.now(),
+                          );
+                          if (date == null) return;
+                          if (!dialogContext.mounted) return;
+                          final time = await showTimePicker(
+                            context: dialogContext,
+                            initialTime: TimeOfDay.fromDateTime(selectedDateTime),
+                          );
+                          setState(() {
+                            selectedDateTime = DateTime(
+                              date.year,
+                              date.month,
+                              date.day,
+                              time?.hour ?? selectedDateTime.hour,
+                              time?.minute ?? selectedDateTime.minute,
+                            );
+                          });
+                        },
+                        child: InputDecorator(
+                          decoration: const InputDecoration(
+                            labelText: 'Date & Time Paid',
+                            prefixIcon: Icon(Icons.access_time),
+                          ),
+                          child: Text(DateFormat('dd MMM yyyy, hh:mm a').format(selectedDateTime)),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      CustomTextField(
+                        controller: notesController,
+                        label: 'Notes (Optional)',
+                        prefixIcon: Icons.note,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () async {
+                  final confirmed = await showDialog<bool>(
+                    context: dialogContext,
+                    builder: (confirmContext) => AlertDialog(
+                      title: const Text('Delete this payment?'),
+                      content: Text(
+                        'This will permanently remove ${tenant?.fullName ?? 'this'}\'s '
+                        '${payment.formattedAmount} payment record. This cannot be undone.',
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(confirmContext, false),
+                          child: const Text('Cancel'),
+                        ),
+                        TextButton(
+                          onPressed: () => Navigator.pop(confirmContext, true),
+                          style: TextButton.styleFrom(foregroundColor: Colors.red),
+                          child: const Text('Delete'),
+                        ),
+                      ],
+                    ),
+                  );
+
+                  if (confirmed != true) return;
+                  if (!dialogContext.mounted) return;
+
+                  showDialog(
+                    context: dialogContext,
+                    barrierDismissible: false,
+                    builder: (_) => const Center(child: CircularProgressIndicator()),
+                  );
+
+                  final success = await provider.deletePayment(payment.id);
+
+                  if (dialogContext.mounted) {
+                    Navigator.pop(dialogContext); // loading spinner
+                    Navigator.pop(dialogContext); // edit dialog
+
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          success
+                              ? 'Payment deleted'
+                              : provider.error ?? 'Failed to delete payment',
+                        ),
+                        backgroundColor: success ? Colors.green : Colors.red,
+                      ),
+                    );
+                  }
+                },
+                style: TextButton.styleFrom(foregroundColor: Colors.red),
+                child: const Text('Delete'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('Cancel'),
+              ),
+              CustomButton(
+                text: 'Save Changes',
+                onPressed: () async {
+                  if (!(formKey.currentState?.validate() ?? false)) return;
+
+                  showDialog(
+                    context: dialogContext,
+                    barrierDismissible: false,
+                    builder: (_) => const Center(child: CircularProgressIndicator()),
+                  );
+
+                  final success = await provider.editPayment(
+                    payment.id,
+                    amount: double.parse(amountController.text),
+                    method: selectedMethod,
+                    monthYear: monthYearController.text.trim(),
+                    paidDate: selectedDateTime,
+                    notes: notesController.text.trim().isEmpty ? null : notesController.text.trim(),
+                  );
+
+                  if (dialogContext.mounted) {
+                    Navigator.pop(dialogContext);
+                    Navigator.pop(dialogContext);
+
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          success
+                              ? 'Payment updated successfully'
+                              : provider.error ?? 'Failed to update payment',
+                        ),
+                        backgroundColor: success ? Colors.green : Colors.red,
+                      ),
+                    );
+                  }
+                },
+              ),
+            ],
+          );
+        },
+      ),
     );
   }
 

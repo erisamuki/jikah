@@ -5,7 +5,6 @@ import '../../services/database_service.dart';
 import '../../services/payment_service.dart';
 import '../../models/payment_model.dart';
 import '../../models/unit_model.dart';
-import '../../services/currency_formatter.dart';
 
 class TenantDashboardScreen extends StatefulWidget {
   const TenantDashboardScreen({super.key});
@@ -61,16 +60,14 @@ class _TenantDashboardScreenState extends State<TenantDashboardScreen> {
             // Welcome
             Text(
               'Welcome, ${user?.fullName.split(' ').first ?? 'Tenant'}!',
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
+              style: Theme.of(
+                context,
+              ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
             Text(
               'Manage your rent and requests',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: Colors.grey.shade600,
-                  ),
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.grey.shade600),
             ),
             const SizedBox(height: 24),
 
@@ -88,26 +85,17 @@ class _TenantDashboardScreenState extends State<TenantDashboardScreen> {
                         children: [
                           const Text(
                             'Monthly Rent',
-                            style: TextStyle(
-                              color: Colors.white70,
-                              fontSize: 14,
-                            ),
+                            style: TextStyle(color: Colors.white70, fontSize: 14),
                           ),
                           Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 4,
-                            ),
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                             decoration: BoxDecoration(
                               color: Colors.white.withValues(alpha: 0.2),
                               borderRadius: BorderRadius.circular(20),
                             ),
                             child: Text(
                               'Unit ${_unit!.unitNumber}',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 12,
-                              ),
+                              style: const TextStyle(color: Colors.white, fontSize: 12),
                             ),
                           ),
                         ],
@@ -124,10 +112,7 @@ class _TenantDashboardScreenState extends State<TenantDashboardScreen> {
                       const SizedBox(height: 8),
                       Text(
                         'Due on day ${_unit!.paymentDueDay ?? 1} of each month',
-                        style: const TextStyle(
-                          color: Colors.white70,
-                          fontSize: 12,
-                        ),
+                        style: const TextStyle(color: Colors.white70, fontSize: 12),
                       ),
                     ],
                   ),
@@ -138,9 +123,7 @@ class _TenantDashboardScreenState extends State<TenantDashboardScreen> {
             // Payment Status
             Text(
               'Payment Status',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 12),
             _buildPaymentStatus(user?.uid),
@@ -149,9 +132,7 @@ class _TenantDashboardScreenState extends State<TenantDashboardScreen> {
             // Quick Actions
             Text(
               'Quick Actions',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 12),
             Row(
@@ -184,9 +165,7 @@ class _TenantDashboardScreenState extends State<TenantDashboardScreen> {
             // Recent Payments
             Text(
               'Recent Payments',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 12),
             _buildRecentPayments(user?.uid),
@@ -199,10 +178,7 @@ class _TenantDashboardScreenState extends State<TenantDashboardScreen> {
   Widget _buildPaymentStatus(String? tenantId) {
     if (tenantId == null) {
       return const Card(
-        child: Padding(
-          padding: EdgeInsets.all(16),
-          child: Text('No payment data'),
-        ),
+        child: Padding(padding: EdgeInsets.all(16), child: Text('No payment data')),
       );
     }
 
@@ -219,7 +195,7 @@ class _TenantDashboardScreenState extends State<TenantDashboardScreen> {
         }
 
         final payments = snapshot.data ?? [];
-        
+
         // Get current month payment
         final now = DateTime.now();
         final currentMonthPayment = payments.where((p) {
@@ -232,32 +208,13 @@ class _TenantDashboardScreenState extends State<TenantDashboardScreen> {
 
         return Row(
           children: [
-            Expanded(
-              child: _buildStatusCard(
-                'Paid',
-                '$paid',
-                Colors.green,
-                Icons.check_circle,
-              ),
-            ),
+            Expanded(child: _buildStatusCard('Paid', '$paid', Colors.green, Icons.check_circle)),
             const SizedBox(width: 8),
             Expanded(
-              child: _buildStatusCard(
-                'Pending',
-                '$pending',
-                Colors.orange,
-                Icons.hourglass_empty,
-              ),
+              child: _buildStatusCard('Pending', '$pending', Colors.orange, Icons.hourglass_empty),
             ),
             const SizedBox(width: 8),
-            Expanded(
-              child: _buildStatusCard(
-                'Overdue',
-                '$overdue',
-                Colors.red,
-                Icons.warning,
-              ),
-            ),
+            Expanded(child: _buildStatusCard('Overdue', '$overdue', Colors.red, Icons.warning)),
           ],
         );
       },
@@ -274,19 +231,9 @@ class _TenantDashboardScreenState extends State<TenantDashboardScreen> {
             const SizedBox(height: 8),
             Text(
               value,
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-                color: color,
-              ),
+              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: color),
             ),
-            Text(
-              title,
-              style: TextStyle(
-                color: Colors.grey.shade600,
-                fontSize: 12,
-              ),
-            ),
+            Text(title, style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
           ],
         ),
       ),
@@ -313,10 +260,7 @@ class _TenantDashboardScreenState extends State<TenantDashboardScreen> {
                 child: Icon(icon, color: color, size: 28),
               ),
               const SizedBox(height: 12),
-              Text(
-                title,
-                style: const TextStyle(fontWeight: FontWeight.w600),
-              ),
+              Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
             ],
           ),
         ),
@@ -357,10 +301,7 @@ class _TenantDashboardScreenState extends State<TenantDashboardScreen> {
                   children: [
                     Icon(Icons.receipt_long, size: 48, color: Colors.grey.shade400),
                     const SizedBox(height: 12),
-                    Text(
-                      'No payments yet',
-                      style: TextStyle(color: Colors.grey.shade600),
-                    ),
+                    Text('No payments yet', style: TextStyle(color: Colors.grey.shade600)),
                   ],
                 ),
               ),
@@ -389,10 +330,7 @@ class _TenantDashboardScreenState extends State<TenantDashboardScreen> {
                 trailing: Chip(
                   label: Text(
                     payment.statusDisplay,
-                    style: TextStyle(
-                      color: _getStatusColor(payment.status),
-                      fontSize: 11,
-                    ),
+                    style: TextStyle(color: _getStatusColor(payment.status), fontSize: 11),
                   ),
                   backgroundColor: _getStatusColor(payment.status).withValues(alpha: 0.1),
                   side: BorderSide.none,

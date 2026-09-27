@@ -7,6 +7,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/financial_provider.dart';
+import '../../models/user_model.dart';
 
 // Same breakpoint LandlordHomeScreen uses for its sidebar/drawer switch,
 // kept in sync so "wide" means the same thing everywhere in the app.
@@ -25,10 +26,12 @@ class _FinancialTrackingScreenState extends State<FinancialTrackingScreen>
   final _dateTimeFormat = DateFormat('dd MMM yyyy, hh:mm a');
   final _currencyFormat = NumberFormat.currency(locale: 'en_UG', symbol: 'UGX ', decimalDigits: 0);
 
+  DateTime _selectedMonth = DateTime(DateTime.now().year, DateTime.now().month);
+
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 4, vsync: this);
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final user = context.read<AuthProvider>().currentUser;
@@ -78,6 +81,7 @@ class _FinancialTrackingScreenState extends State<FinancialTrackingScreen>
                         fontSize: isWide ? 14 : 13,
                       ),
                       tabs: const [
+                        Tab(icon: Icon(Icons.calendar_month, size: 18), text: 'Monthly'),
                         Tab(icon: Icon(Icons.receipt_long, size: 18), text: 'Transactions'),
                         Tab(icon: Icon(Icons.warning_amber, size: 18), text: 'Arrears'),
                         Tab(icon: Icon(Icons.savings, size: 18), text: 'Advance'),
@@ -88,6 +92,7 @@ class _FinancialTrackingScreenState extends State<FinancialTrackingScreen>
                     child: TabBarView(
                       controller: _tabController,
                       children: [
+                        _buildMonthlyTab(provider, isWide),
                         _buildTransactionsTab(provider, isWide),
                         _buildBalanceTab(
                           provider.inArrears,
@@ -148,6 +153,177 @@ class _FinancialTrackingScreenState extends State<FinancialTrackingScreen>
     );
   }
 
+  /// "Who paid, who didn't, how much was made this month" — the
+  /// overview a landlord actually checks in day to day, with a month
+  /// picker so past months can be reviewed too.
+  Widget _buildMonthlyTab(FinancialProvider provider, bool isWide) {
+    final year = _selectedMonth.year;
+    final month = _selectedMonth.month;
+
+    final collected = provider.collectedForMonth(year, month);
+    final expected = provider.expectedForMonth(year, month);
+    final outstanding = expected - collected;
+    final paidTenants = provider.paidTenantsForMonth(year, month);
+    final unpaidTenants = provider.unpaidTenantsForMonth(year, month);
+
+    return SingleChildScrollView(
+      child: _constrained(
+        isWide: isWide,
+        child: Padding(
+          padding: EdgeInsets.all(isWide ? 24 : 16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Month picker
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.chevron_left),
+                    onPressed: () => setState(() {
+                      _selectedMonth = DateTime(_selectedMonth.year, _selectedMonth.month - 1);
+                    }),
+                  ),
+                  Text(
+                    DateFormat('MMMM yyyy').format(_selectedMonth),
+                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.chevron_right),
+                    onPressed: () => setState(() {
+                      _selectedMonth = DateTime(_selectedMonth.year, _selectedMonth.month + 1);
+                    }),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+
+              // Income summary cards
+              isWide
+                  ? Row(
+                      children: [
+                        Expanded(child: _monthStatCard('Collected', collected, Colors.green)),
+                        const SizedBox(width: 12),
+                        Expanded(child: _monthStatCard('Expected', expected, Colors.blueGrey)),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: _monthStatCard(
+                            outstanding > 0 ? 'Outstanding' : 'Surplus',
+                            outstanding.abs(),
+                            outstanding > 0 ? Colors.red : Colors.green,
+                          ),
+                        ),
+                      ],
+                    )
+                  : Column(
+                      children: [
+                        _monthStatCard('Collected', collected, Colors.green),
+                        const SizedBox(height: 8),
+                        _monthStatCard('Expected', expected, Colors.blueGrey),
+                        const SizedBox(height: 8),
+                        _monthStatCard(
+                          outstanding > 0 ? 'Outstanding' : 'Surplus',
+                          outstanding.abs(),
+                          outstanding > 0 ? Colors.red : Colors.green,
+                        ),
+                      ],
+                    ),
+
+              const SizedBox(height: 24),
+              Text(
+                'Paid (${paidTenants.length})',
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 15,
+                  color: Colors.green,
+                ),
+              ),
+              const SizedBox(height: 8),
+              if (paidTenants.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Text(
+                    'No one has paid yet this month',
+                    style: TextStyle(color: Colors.grey.shade600),
+                  ),
+                )
+              else
+                ...paidTenants.map((t) => _tenantStatusTile(t, provider, paid: true)),
+
+              const SizedBox(height: 20),
+              Text(
+                'Not Paid (${unpaidTenants.length})',
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 15,
+                  color: Colors.red,
+                ),
+              ),
+              const SizedBox(height: 8),
+              if (unpaidTenants.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Text(
+                    'Everyone has paid this month',
+                    style: TextStyle(color: Colors.grey.shade600),
+                  ),
+                )
+              else
+                ...unpaidTenants.map((t) => _tenantStatusTile(t, provider, paid: false)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _monthStatCard(String label, double amount, Color color) {
+    return Card(
+      elevation: 1,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(label, style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
+            const SizedBox(height: 4),
+            Text(
+              _currencyFormat.format(amount),
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: color),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _tenantStatusTile(UserModel tenant, FinancialProvider provider, {required bool paid}) {
+    final unit = tenant.assignedUnitId != null ? provider.unitById(tenant.assignedUnitId!) : null;
+    final property = tenant.assignedPropertyId != null
+        ? provider.propertyById(tenant.assignedPropertyId!)
+        : null;
+
+    return Card(
+      elevation: 0,
+      color: (paid ? Colors.green : Colors.red).withValues(alpha: 0.06),
+      margin: const EdgeInsets.only(bottom: 6),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      child: ListTile(
+        dense: true,
+        leading: Icon(
+          paid ? Icons.check_circle : Icons.cancel,
+          color: paid ? Colors.green : Colors.red,
+          size: 20,
+        ),
+        title: Text(tenant.fullName, style: const TextStyle(fontWeight: FontWeight.w600)),
+        subtitle: Text(
+          '${property?.name ?? 'Unknown'} • Room/Unit ${unit?.unitNumber ?? 'Unknown'}',
+        ),
+      ),
+    );
+  }
+
   Widget _buildTransactionsTab(FinancialProvider provider, bool isWide) {
     final transactions = provider.recentTransactions;
 
@@ -194,7 +370,7 @@ class _FinancialTrackingScreenState extends State<FinancialTrackingScreen>
                           children: [
                             const SizedBox(height: 2),
                             Text(
-                              '${property?.name ?? 'Unknown property'} \u2022 Room/Unit ${unit?.unitNumber ?? 'Unknown'}',
+                              '${property?.name ?? 'Unknown property'} • Room/Unit ${unit?.unitNumber ?? 'Unknown'}',
                             ),
                             if (property?.location != null)
                               Text(
@@ -246,7 +422,7 @@ class _FinancialTrackingScreenState extends State<FinancialTrackingScreen>
           icon: isArrears ? Icons.warning_amber : Icons.savings,
           color: color,
           text:
-              '${balances.length} tenant${balances.length == 1 ? '' : 's'} \u2014 '
+              '${balances.length} tenant${balances.length == 1 ? '' : 's'} — '
               'Total ${isArrears ? 'owed' : 'credit'}: ${_currencyFormat.format(total)}',
           isWide: isWide,
         ),
@@ -282,10 +458,17 @@ class _FinancialTrackingScreenState extends State<FinancialTrackingScreen>
                           children: [
                             const SizedBox(height: 2),
                             Text(
-                              '${b.property?.name ?? 'Unknown property'} \u2022 Room/Unit ${b.unit?.unitNumber ?? 'Unknown'}',
+                              '${b.property?.name ?? 'Unknown property'} • Room/Unit ${b.unit?.unitNumber ?? 'Unknown'}',
                             ),
                             Text(
-                              '${b.monthsOwed} month(s) since lease start',
+                              // For arrears, show the actual unpaid month
+                              // count alongside the total tracked months
+                              // so it's clear these are two different
+                              // numbers (e.g. "1 month unpaid (of 2
+                              // tracked since lease start)").
+                              isArrears
+                                  ? '${b.monthsUnpaid} month(s) unpaid (of ${b.monthsOwed} since lease start)'
+                                  : '${b.monthsOwed} month(s) since lease start',
                               style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
                             ),
                           ],
@@ -308,18 +491,15 @@ class _FinancialTrackingScreenState extends State<FinancialTrackingScreen>
   }
 
   /// Loads a Unicode-capable font for the PDF (default Helvetica silently
-  /// drops characters like "—" and "•" used in this report, logging a
+  /// drops characters like "—" used in this report's headers, logging a
   /// console warning instead of rendering them).
   ///
-  /// Requires two font assets bundled in pubspec.yaml, e.g.:
+  /// Requires two font assets bundled in pubspec.yaml:
   ///   assets:
   ///     - assets/fonts/NotoSans-Regular.ttf
   ///     - assets/fonts/NotoSans-Bold.ttf
-  /// Download both from https://fonts.google.com/noto/specimen/Noto+Sans
-  ///
-  /// Falls back to the pdf package's default theme (Helvetica) if the
-  /// assets aren't present yet, so a missing font file doesn't crash export
-  /// — you'll just see the Unicode warning again until the assets are added.
+  /// Falls back to the default theme if the assets aren't found, so a
+  /// missing font doesn't crash export.
   Future<pw.ThemeData?> _loadPdfTheme() async {
     try {
       final regularData = await rootBundle.load('assets/fonts/NotoSans-Regular.ttf');
@@ -347,7 +527,7 @@ class _FinancialTrackingScreenState extends State<FinancialTrackingScreen>
           pw.Header(
             level: 0,
             child: pw.Text(
-              'Jikah \u2014 Payment Report',
+              'Jikah — Payment Report',
               style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold),
             ),
           ),
@@ -380,7 +560,10 @@ class _FinancialTrackingScreenState extends State<FinancialTrackingScreen>
                 b.tenant.fullName,
                 b.property?.name ?? 'Unknown',
                 b.unit?.unitNumber ?? 'Unknown',
-                b.monthsOwed.toString(),
+                // Actual unpaid months, not months tracked since lease
+                // start — see TenantBalance.monthsUnpaid for why these
+                // differ.
+                b.monthsUnpaid.toString(),
                 _currencyFormat.format(b.arrearsAmount),
               ];
             }).toList(),

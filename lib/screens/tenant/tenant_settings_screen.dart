@@ -3,7 +3,6 @@ import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/theme_service.dart';
 import '../../widgets/custom_text_field.dart';
-import '../../widgets/custom_button.dart';
 import '../auth/login_screen.dart';
 
 class TenantSettingsScreen extends StatelessWidget {
@@ -21,9 +20,7 @@ class TenantSettingsScreen extends StatelessWidget {
           // Appearance
           Text(
             'Appearance',
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 12),
           Card(
@@ -33,9 +30,7 @@ class TenantSettingsScreen extends StatelessWidget {
                 color: Colors.teal,
               ),
               title: const Text('Dark Mode'),
-              subtitle: Text(
-                themeService.isDarkMode ? 'Currently dark' : 'Currently light',
-              ),
+              subtitle: Text(themeService.isDarkMode ? 'Currently dark' : 'Currently light'),
               trailing: Switch(
                 value: themeService.isDarkMode,
                 onChanged: (value) {
@@ -50,9 +45,7 @@ class TenantSettingsScreen extends StatelessWidget {
           // Security
           Text(
             'Security',
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 12),
           Card(
@@ -69,9 +62,7 @@ class TenantSettingsScreen extends StatelessWidget {
           // Notifications
           Text(
             'Notifications',
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 12),
           Card(
@@ -110,9 +101,7 @@ class TenantSettingsScreen extends StatelessWidget {
           // Support
           Text(
             'Support',
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 12),
           Card(
@@ -123,9 +112,9 @@ class TenantSettingsScreen extends StatelessWidget {
                   title: const Text('Help & FAQ'),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Help center coming soon!')),
-                    );
+                    ScaffoldMessenger.of(
+                      context,
+                    ).showSnackBar(const SnackBar(content: Text('Help center coming soon!')));
                   },
                 ),
                 const Divider(height: 1),
@@ -134,9 +123,9 @@ class TenantSettingsScreen extends StatelessWidget {
                   title: const Text('Contact Property Manager'),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Contact feature coming soon!')),
-                    );
+                    ScaffoldMessenger.of(
+                      context,
+                    ).showSnackBar(const SnackBar(content: Text('Contact feature coming soon!')));
                   },
                 ),
               ],
@@ -147,9 +136,7 @@ class TenantSettingsScreen extends StatelessWidget {
           // About
           Text(
             'About',
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 12),
           Card(
@@ -247,10 +234,7 @@ class TenantSettingsScreen extends StatelessWidget {
           ),
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Cancel'),
-          ),
+          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancel')),
           Consumer<AuthProvider>(
             builder: (context, authProvider, _) => ElevatedButton(
               onPressed: () async {
@@ -291,10 +275,7 @@ class TenantSettingsScreen extends StatelessWidget {
         title: const Text('Logout'),
         content: const Text('Are you sure you want to logout?'),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Cancel'),
-          ),
+          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancel')),
           TextButton(
             onPressed: () async {
               await context.read<AuthProvider>().logout();

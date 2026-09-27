@@ -1,14 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
-import '../../providers/property_provider.dart';
 import '../../services/database_service.dart';
 import '../../services/auth_service.dart';
 import '../../models/user_model.dart';
 import '../../models/unit_model.dart';
 import '../../widgets/empty_state.dart';
 import '../../widgets/custom_text_field.dart';
-import '../../widgets/custom_button.dart';
 
 class ManagerTenantsScreen extends StatefulWidget {
   const ManagerTenantsScreen({super.key});
@@ -103,25 +101,16 @@ class _ManagerTenantsScreenState extends State<ManagerTenantsScreen> {
           child: tenant.profileImageUrl == null
               ? Text(
                   tenant.fullName.substring(0, 1).toUpperCase(),
-                  style: TextStyle(
-                    color: Colors.blue.shade700,
-                    fontWeight: FontWeight.bold,
-                  ),
+                  style: TextStyle(color: Colors.blue.shade700, fontWeight: FontWeight.bold),
                 )
               : null,
         ),
-        title: Text(
-          tenant.fullName,
-          style: const TextStyle(fontWeight: FontWeight.bold),
-        ),
+        title: Text(tenant.fullName, style: const TextStyle(fontWeight: FontWeight.bold)),
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(tenant.phone),
-            Text(
-              tenant.email,
-              style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
-            ),
+            Text(tenant.email, style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
           ],
         ),
         trailing: PopupMenuButton<String>(
@@ -144,186 +133,176 @@ class _ManagerTenantsScreenState extends State<ManagerTenantsScreen> {
   }
 
   void _showAddTenantDialog(BuildContext context, UserModel manager) {
-  final formKey = GlobalKey<FormState>();
-  final nameController = TextEditingController();
-  final emailController = TextEditingController();
-  final phoneController = TextEditingController();
-  final passwordController = TextEditingController();
-  final ninController = TextEditingController();
-  final nextOfKinController = TextEditingController();
-  final nextOfKinContactController = TextEditingController();
+    final formKey = GlobalKey<FormState>();
+    final nameController = TextEditingController();
+    final emailController = TextEditingController();
+    final phoneController = TextEditingController();
+    final passwordController = TextEditingController();
+    final ninController = TextEditingController();
+    final nextOfKinController = TextEditingController();
+    final nextOfKinContactController = TextEditingController();
 
-  String? selectedUnitId;
-  bool isLoading = false;
+    String? selectedUnitId;
+    bool isLoading = false;
 
-  if (_vacantUnits.isEmpty) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('No vacant units available'),
-        backgroundColor: Colors.orange,
-      ),
-    );
-    return;
-  }
+    if (_vacantUnits.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No vacant units available'), backgroundColor: Colors.orange),
+      );
+      return;
+    }
 
-  showDialog(
-    context: context,
-    builder: (dialogContext) => StatefulBuilder(
-      builder: (ctx, setState) => AlertDialog(
-        title: const Text('Add Tenant'),
-        content: SingleChildScrollView(
-          child: Form(
-            key: formKey,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                CustomTextField(
-                  controller: nameController,
-                  label: 'Full Name',
-                  prefixIcon: Icons.person,
-                  validator: (v) => v?.isEmpty ?? true ? 'Required' : null,
-                ),
-                const SizedBox(height: 16),
-                CustomTextField(
-                  controller: emailController,
-                  label: 'Email',
-                  prefixIcon: Icons.email,
-                  keyboardType: TextInputType.emailAddress,
-                  validator: (v) {
-                    if (v?.isEmpty ?? true) return 'Required';
-                    if (!v!.contains('@')) return 'Invalid email';
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 16),
-                CustomTextField(
-                  controller: phoneController,
-                  label: 'Phone Number',
-                  prefixIcon: Icons.phone,
-                  keyboardType: TextInputType.phone,
-                  validator: (v) => v?.isEmpty ?? true ? 'Required' : null,
-                ),
-                const SizedBox(height: 16),
-                CustomTextField(
-                  controller: passwordController,
-                  label: 'Temporary Password',
-                  prefixIcon: Icons.lock,
-                  hint: 'Tenant will use this to login',
-                  validator: (v) {
-                    if (v?.isEmpty ?? true) return 'Required';
-                    if (v!.length < 6) return 'Minimum 6 characters';
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 16),
-                DropdownButtonFormField<String>(
-                  initialValue: selectedUnitId,
-                  decoration: const InputDecoration(
-                    labelText: 'Select Unit',
-                    prefixIcon: Icon(Icons.door_front_door),
+    showDialog(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (ctx, setState) => AlertDialog(
+          title: const Text('Add Tenant'),
+          content: SingleChildScrollView(
+            child: Form(
+              key: formKey,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CustomTextField(
+                    controller: nameController,
+                    label: 'Full Name',
+                    prefixIcon: Icons.person,
+                    validator: (v) => v?.isEmpty ?? true ? 'Required' : null,
                   ),
-                  items: _vacantUnits.map((u) {
-                    return DropdownMenuItem(
-                      value: u.id,
-                      child: Text('Unit ${u.unitNumber} - ${u.formattedRent}'),
-                    );
-                  }).toList(),
-                  onChanged: (value) {
-                    setState(() => selectedUnitId = value);
-                  },
-                  validator: (v) => v == null ? 'Select a unit' : null,
-                ),
-                const SizedBox(height: 16),
-                CustomTextField(
-                  controller: ninController,
-                  label: 'NIN / Passport',
-                  prefixIcon: Icons.badge,
-                  validator: (v) => v?.isEmpty ?? true ? 'Required' : null,
-                ),
-                const SizedBox(height: 16),
-                CustomTextField(
-                  controller: nextOfKinController,
-                  label: 'Next of Kin',
-                  prefixIcon: Icons.family_restroom,
-                  validator: (v) => v?.isEmpty ?? true ? 'Required' : null,
-                ),
-                const SizedBox(height: 16),
-                CustomTextField(
-                  controller: nextOfKinContactController,
-                  label: 'Next of Kin Contact',
-                  prefixIcon: Icons.phone_callback,
-                  keyboardType: TextInputType.phone,
-                  validator: (v) => v?.isEmpty ?? true ? 'Required' : null,
-                ),
-              ],
+                  const SizedBox(height: 16),
+                  CustomTextField(
+                    controller: emailController,
+                    label: 'Email',
+                    prefixIcon: Icons.email,
+                    keyboardType: TextInputType.emailAddress,
+                    validator: (v) {
+                      if (v?.isEmpty ?? true) return 'Required';
+                      if (!v!.contains('@')) return 'Invalid email';
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  CustomTextField(
+                    controller: phoneController,
+                    label: 'Phone Number',
+                    prefixIcon: Icons.phone,
+                    keyboardType: TextInputType.phone,
+                    validator: (v) => v?.isEmpty ?? true ? 'Required' : null,
+                  ),
+                  const SizedBox(height: 16),
+                  CustomTextField(
+                    controller: passwordController,
+                    label: 'Temporary Password',
+                    prefixIcon: Icons.lock,
+                    hint: 'Tenant will use this to login',
+                    validator: (v) {
+                      if (v?.isEmpty ?? true) return 'Required';
+                      if (v!.length < 6) return 'Minimum 6 characters';
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  DropdownButtonFormField<String>(
+                    initialValue: selectedUnitId,
+                    decoration: const InputDecoration(
+                      labelText: 'Select Unit',
+                      prefixIcon: Icon(Icons.door_front_door),
+                    ),
+                    items: _vacantUnits.map((u) {
+                      return DropdownMenuItem(
+                        value: u.id,
+                        child: Text('Unit ${u.unitNumber} - ${u.formattedRent}'),
+                      );
+                    }).toList(),
+                    onChanged: (value) {
+                      setState(() => selectedUnitId = value);
+                    },
+                    validator: (v) => v == null ? 'Select a unit' : null,
+                  ),
+                  const SizedBox(height: 16),
+                  CustomTextField(
+                    controller: ninController,
+                    label: 'NIN / Passport',
+                    prefixIcon: Icons.badge,
+                    validator: (v) => v?.isEmpty ?? true ? 'Required' : null,
+                  ),
+                  const SizedBox(height: 16),
+                  CustomTextField(
+                    controller: nextOfKinController,
+                    label: 'Next of Kin',
+                    prefixIcon: Icons.family_restroom,
+                    validator: (v) => v?.isEmpty ?? true ? 'Required' : null,
+                  ),
+                  const SizedBox(height: 16),
+                  CustomTextField(
+                    controller: nextOfKinContactController,
+                    label: 'Next of Kin Contact',
+                    prefixIcon: Icons.phone_callback,
+                    keyboardType: TextInputType.phone,
+                    validator: (v) => v?.isEmpty ?? true ? 'Required' : null,
+                  ),
+                ],
+              ),
             ),
           ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: isLoading
-                ? null
-                : () async {
-                    if (!formKey.currentState!.validate()) return;
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancel')),
+            ElevatedButton(
+              onPressed: isLoading
+                  ? null
+                  : () async {
+                      if (!formKey.currentState!.validate()) return;
 
-                    setState(() => isLoading = true);
+                      setState(() => isLoading = true);
 
-                    final authService = AuthService();
-                    final result = await authService.createTenant(
-                      fullName: nameController.text.trim(),
-                      email: emailController.text.trim(),
-                      phone: phoneController.text.trim(),
-                      password: passwordController.text,
-                      landlordId: manager.assignedLandlordId!,
-                      propertyId: manager.assignedPropertyId!,
-                      unitId: selectedUnitId!,
-                      ninOrPassport: ninController.text.trim(),
-                      nextOfKin: nextOfKinController.text.trim(),
-                      nextOfKinContact: nextOfKinContactController.text.trim(),
-                    );
-
-                    setState(() => isLoading = false);
-
-                    if (dialogContext.mounted) {
-                      Navigator.pop(dialogContext);
-
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(
-                            result['success']
-                                ? 'Tenant added successfully!'
-                                : result['message'] ?? 'Failed to add tenant',
-                          ),
-                          backgroundColor:
-                              result['success'] ? Colors.green : Colors.red,
-                        ),
+                      final authService = AuthService();
+                      final result = await authService.createTenant(
+                        fullName: nameController.text.trim(),
+                        email: emailController.text.trim(),
+                        phone: phoneController.text.trim(),
+                        password: passwordController.text,
+                        landlordId: manager.assignedLandlordId!,
+                        propertyId: manager.assignedPropertyId!,
+                        unitId: selectedUnitId!,
+                        ninOrPassport: ninController.text.trim(),
+                        nextOfKin: nextOfKinController.text.trim(),
+                        nextOfKinContact: nextOfKinContactController.text.trim(),
                       );
 
-                      if (result['success']) {
-                        _loadVacantUnits();
+                      setState(() => isLoading = false);
+
+                      if (dialogContext.mounted) {
+                        Navigator.pop(dialogContext);
+
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              result['success']
+                                  ? 'Tenant added successfully!'
+                                  : result['message'] ?? 'Failed to add tenant',
+                            ),
+                            backgroundColor: result['success'] ? Colors.green : Colors.red,
+                          ),
+                        );
+
+                        if (result['success']) {
+                          _loadVacantUnits();
+                        }
                       }
-                    }
-                  },
-            child: isLoading
-                ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: Colors.white,
-                    ),
-                  )
-                : const Text('Add Tenant'),
-          ),
-        ],
+                    },
+              child: isLoading
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                    )
+                  : const Text('Add Tenant'),
+            ),
+          ],
+        ),
       ),
-    ),
-  );
-}
+    );
+  }
 
   void _showTenantDetailsDialog(BuildContext context, UserModel tenant) {
     showDialog(
@@ -339,19 +318,13 @@ class _ManagerTenantsScreenState extends State<ManagerTenantsScreen> {
               _buildDetailRow('Phone', tenant.phone),
               if (tenant.ninOrPassport != null)
                 _buildDetailRow('NIN/Passport', tenant.ninOrPassport!),
-              if (tenant.nextOfKin != null)
-                _buildDetailRow('Next of Kin', tenant.nextOfKin!),
+              if (tenant.nextOfKin != null) _buildDetailRow('Next of Kin', tenant.nextOfKin!),
               if (tenant.nextOfKinContact != null)
                 _buildDetailRow('Next of Kin Contact', tenant.nextOfKinContact!),
             ],
           ),
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
-          ),
-        ],
+        actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close'))],
       ),
     );
   }
@@ -366,10 +339,7 @@ class _ManagerTenantsScreenState extends State<ManagerTenantsScreen> {
             width: 120,
             child: Text(
               label,
-              style: TextStyle(
-                color: Colors.grey.shade600,
-                fontWeight: FontWeight.w500,
-              ),
+              style: TextStyle(color: Colors.grey.shade600, fontWeight: FontWeight.w500),
             ),
           ),
           Expanded(child: Text(value)),
@@ -406,12 +376,7 @@ class _ManagerTenantsScreenState extends State<ManagerTenantsScreen> {
             ),
           ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
-          ),
-        ],
+        actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close'))],
       ),
     );
   }

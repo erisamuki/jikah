@@ -15,10 +15,11 @@ class UserModel {
   final String? ninOrPassport; // National ID or Passport
   final String? nextOfKin; // For tenants
   final String? nextOfKinContact;
-  final DateTime? leaseStartDate; // For tenants \u2014 used for arrears/advance calc
+  final DateTime? leaseStartDate; // For tenants — used for arrears/advance calc
   final DateTime createdAt;
   final DateTime? updatedAt;
   final bool isActive;
+  final String fcmToken;
 
   UserModel({
     required this.uid,
@@ -37,6 +38,7 @@ class UserModel {
     required this.createdAt,
     this.updatedAt,
     this.isActive = true,
+    required this.fcmToken,
   });
 
   // Convert to Firestore map
@@ -58,6 +60,7 @@ class UserModel {
       'createdAt': Timestamp.fromDate(createdAt),
       'updatedAt': updatedAt != null ? Timestamp.fromDate(updatedAt!) : null,
       'isActive': isActive,
+      'fcmToken': fcmToken,
     };
   }
 
@@ -82,6 +85,7 @@ class UserModel {
       createdAt: (map['createdAt'] as Timestamp).toDate(),
       updatedAt: map['updatedAt'] != null ? (map['updatedAt'] as Timestamp).toDate() : null,
       isActive: map['isActive'] ?? true,
+      fcmToken: map['fcmToken'] ?? '',
     );
   }
 
@@ -99,6 +103,7 @@ class UserModel {
     String? nextOfKinContact,
     DateTime? leaseStartDate,
     bool? isActive,
+    String? fcmToken,
   }) {
     return UserModel(
       uid: uid,
@@ -117,6 +122,7 @@ class UserModel {
       createdAt: createdAt,
       updatedAt: DateTime.now(),
       isActive: isActive ?? this.isActive,
+      fcmToken: fcmToken ?? this.fcmToken,
     );
   }
 }

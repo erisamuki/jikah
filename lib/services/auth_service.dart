@@ -1,7 +1,8 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import '../models/user_model.dart';
-import '../models/unit_model.dart'; 
+import '../models/unit_model.dart';
 
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -12,6 +13,18 @@ class AuthService {
 
   // Auth state stream
   Stream<User?> get authStateChanges => _auth.authStateChanges();
+
+  // Best-effort fetch of this device's FCM token. Returns '' if it's
+  // unavailable (e.g. simulator, permissions not yet granted) rather
+  // than throwing, so sign-up/login never fails because of push setup.
+  Future<String> _getDeviceFcmToken() async {
+    try {
+      final token = await FirebaseMessaging.instance.getToken();
+      return token ?? '';
+    } catch (e) {
+      return '';
+    }
+  }
 
   // Register Landlord (only landlords can self-register)
   Future<Map<String, dynamic>> registerLandlord({
@@ -31,6 +44,10 @@ class AuthService {
         return {'success': false, 'message': 'Failed to create account'};
       }
 
+      // This is the landlord's own device, so we can capture its FCM
+      // token right away.
+      final fcmToken = await _getDeviceFcmToken();
+
       // Create user model
       UserModel newUser = UserModel(
         uid: credential.user!.uid,
@@ -40,13 +57,11 @@ class AuthService {
         role: UserRole.landlord,
         createdAt: DateTime.now(),
         isActive: true,
+        fcmToken: fcmToken,
       );
 
       // Save to Firestore
-      await _firestore
-          .collection('users')
-          .doc(credential.user!.uid)
-          .set(newUser.toMap());
+      await _firestore.collection('users').doc(credential.user!.uid).set(newUser.toMap());
 
       return {'success': true, 'user': newUser};
     } on FirebaseAuthException catch (e) {
@@ -77,7 +92,10 @@ class AuthService {
         return {'success': false, 'message': 'Failed to create manager account'};
       }
 
-      // Create user model
+      // Create user model. This account is being created from the
+      // landlord's device, not the manager's own, so we leave fcmToken
+      // empty here — it gets filled in properly when the manager logs
+      // in on their own phone.
       UserModel newManager = UserModel(
         uid: credential.user!.uid,
         fullName: fullName.trim(),
@@ -88,13 +106,11 @@ class AuthService {
         assignedPropertyId: propertyId,
         createdAt: DateTime.now(),
         isActive: true,
+        fcmToken: '',
       );
 
       // Save to Firestore
-      await _firestore
-          .collection('users')
-          .doc(credential.user!.uid)
-          .set(newManager.toMap());
+      await _firestore.collection('users').doc(credential.user!.uid).set(newManager.toMap());
 
       // Update property with manager ID
       await _firestore.collection('properties').doc(propertyId).update({
@@ -127,8 +143,7 @@ class AuthService {
   }) async {
     try {
       // Store current user to re-login after creating tenant
-    
-      
+
       // Create auth user
       UserCredential credential = await _auth.createUserWithEmailAndPassword(
         email: email.trim(),
@@ -139,7 +154,9 @@ class AuthService {
         return {'success': false, 'message': 'Failed to create tenant account'};
       }
 
-      // Create user model
+      // Same reasoning as createManager above: this is the
+      // landlord/manager's device, not the tenant's, so fcmToken is
+      // filled in later when the tenant logs in themselves.
       UserModel newTenant = UserModel(
         uid: credential.user!.uid,
         fullName: fullName.trim(),
@@ -154,13 +171,11 @@ class AuthService {
         nextOfKinContact: nextOfKinContact?.trim(),
         createdAt: DateTime.now(),
         isActive: true,
+        fcmToken: '',
       );
 
       // Save to Firestore
-      await _firestore
-          .collection('users')
-          .doc(credential.user!.uid)
-          .set(newTenant.toMap());
+      await _firestore.collection('users').doc(credential.user!.uid).set(newTenant.toMap());
 
       // Update unit with tenant ID and status
       await _firestore.collection('units').doc(unitId).update({
@@ -183,10 +198,7 @@ class AuthService {
   }
 
   // Login
-  Future<Map<String, dynamic>> login({
-    required String email,
-    required String password,
-  }) async {
+  Future<Map<String, dynamic>> login({required String email, required String password}) async {
     try {
       UserCredential credential = await _auth.signInWithEmailAndPassword(
         email: email.trim(),
@@ -216,6 +228,17 @@ class AuthService {
         return {'success': false, 'message': 'Your account has been deactivated'};
       }
 
+      // This is the user's own device, so refresh their FCM token on
+      // every login — covers first-time login after account creation
+      // by someone else, app reinstalls, and normal token rotation.
+      final currentToken = await _getDeviceFcmToken();
+      if (currentToken.isNotEmpty && currentToken != user.fcmToken) {
+        await _firestore.collection('users').doc(credential.user!.uid).update({
+          'fcmToken': currentToken,
+        });
+        user = user.copyWith(fcmToken: currentToken);
+      }
+
       return {'success': true, 'user': user};
     } on FirebaseAuthException catch (e) {
       return {'success': false, 'message': _getAuthErrorMessage(e.code)};
@@ -234,8 +257,7 @@ class AuthService {
     try {
       if (currentUser == null) return null;
 
-      DocumentSnapshot userDoc =
-          await _firestore.collection('users').doc(currentUser!.uid).get();
+      DocumentSnapshot userDoc = await _firestore.collection('users').doc(currentUser!.uid).get();
 
       if (!userDoc.exists) return null;
 
